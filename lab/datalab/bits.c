@@ -254,6 +254,7 @@ int logicalNeg(int x) {
     int fold_2 = ((fold_4 >> 2) | fold_4);
     return (((fold_2 >> 1) | fold_2) & 0x1) ^ 0x1;
 }
+
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
  *  Examples: howManyBits(12) = 5
@@ -267,8 +268,23 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-    return 0;
+    // int sign = x >> 31 & 0x1;
+    int bit_16, bit_8, bit_4, bit_2, bit_1, res;
+    x = x ^ (x >> 31);
+    bit_16 = !!(x >> 16) << 4;  // high 16 bits
+    x >>= bit_16;
+    bit_8 = !!(x >> 8) << 3;
+    x >>= bit_8;
+    bit_4 = !!(x >> 4) << 2;
+    x >>= bit_4;
+    bit_2 = !!(x >> 2) << 1;
+    x >>= bit_2;
+    bit_1 = !!(x >> 1);
+    x >>= bit_1;
+    res = bit_16 + bit_8 + bit_4 + bit_2 + bit_1 + x + 1;
+    return res;
 }
+
 // float
 /*
  * floatScale2 - Return bit-level equivalent of expression 2*f for
@@ -281,8 +297,23 @@ int howManyBits(int x) {
  *   Max ops: 30
  *   Rating: 4
  */
+
 unsigned floatScale2(unsigned uf) {
-    return 2;
+    unsigned sign = (uf >> 31) & 0x1;
+    unsigned exp = (uf >> 23) & 0xff;
+    unsigned frac = uf & 0x7fffff;
+    if (exp == 0xff) {
+        // NaN or INF
+        return uf;
+    }
+    if (exp == 0x00) {
+        if ((frac >> 22) & 0x1) {
+            exp += 1;
+        }
+        frac = frac << 1;
+    } else
+        exp += 1;
+    return (sign << 31) | (exp << 23) | frac;
 }
 /*
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
@@ -297,7 +328,28 @@ unsigned floatScale2(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-    return 2;
+    unsigned sign = (uf >> 31) & 0x1;
+    unsigned exp = (uf >> 23) & 0xff;
+    unsigned frac = uf & 0x7fffff;
+    int res = 0x1;
+    // < 0
+    if (exp < 127u) {
+        return 0u;
+    }
+    // NaN or INF
+    if (exp == 0xff || exp > 31u + 127u) {
+        return 0x80000000u;
+    }
+    while (exp > 127u) {
+        res <<= 1;
+        res |= (frac >> 22) & 0x1;
+        frac <<= 1;
+        exp--;
+    }
+    if (sign) {
+        res = -res;
+    }
+    return res;
 }
 /*
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -313,5 +365,26 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+    unsigned sign = 0;
+    unsigned exp = 0;
+    unsigned frac = 0;
+    // too small
+    if (x < -149) {
+        return 0;
+    }
+    // too large
+    if (x > 127) {
+        exp = 0xff;
+        return (sign << 31) | (exp << 23) | frac;
+    }
+
+    if (x < -126) {
+        // denormalized
+        x = -(x + 126);
+        frac = 0x800000;
+        frac >>= x;
+    } else {
+        exp = x + 127;
+    }
+    return (sign << 31) | (exp << 23) | frac;
 }
