@@ -81,6 +81,22 @@ Size of different types.
 
 [cdecl](https://cdecl.org/) is a good tool to understand complex declarations.
 
+**Something more crazy...**
+
+`int (*(*f)[13])()` 
+
+> `f ` is pointer to array[13] of pointer to function returning int
+
+`int (**f[13])()`
+
+> `f ` is array[13] of pointer of pointer to function returning int
+
+***Note***: **`->`, `()`, and `[]` have high precedence, with `*` and `&` just below.**
+
+`int (*(*x[3])()) [5]`
+
+> x is array[3] of pointer to function returning pointer to array[5] of int
+
 ## Overflow
 
 ### Overflow Attacks
