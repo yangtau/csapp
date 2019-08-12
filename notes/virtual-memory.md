@@ -67,14 +67,16 @@ Allocate is linear time in number of free blocks, and it is much faster when mos
 
 #### Segregated free list
 
-  Different free lists for different size classes.
+ Different free lists for different size classes. When the allocator needs a block of size n, it searches the appropriate free list first. If it cannot find one that fits, than it searches the next list, and so on.
+
+- Segregated fits
+
+  Each list contains potentially different -size blocks whose sizes are members of size classes.
+
+- Buddy System
 
 #### Blocks sorted by size
 
   using a balanced tree with pointers within each free blocks, and the length used as a key.
-
-
-
-
 
 
