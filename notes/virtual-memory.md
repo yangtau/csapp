@@ -41,6 +41,130 @@ VM greatly simplified memory management. OS provide a separate page table, and t
 
 VM provide a natural way to protect memory. First of all, providing separate virtual address space make it easy to isolate private memories of different processes. Moreover, to control access to a virtual page, we can add some additional permission bits to the PTE. Every time CPU genrates an address, MMU can check if the access is legal.
 
+## Address Translation
+
+$$
+MAP: VAS \rightarrow PAS \cup \emptyset
+$$
+
+### Basic
+
+```
+            Virtual Address
+            +------+------+
+        +---+ VPN  | VPO  |
+        |   +------+---+--+
+        v              |
+    +---+--------+     |
+    | Page Table |     |
+    +---------+--+     |
+              |        |
+              v        v
+            +-+----+---+--+
+            | PPN  | PPO  |
+            +------+------+
+            Physical Address
+
+```
+**VPN** : virtual page number.
+
+**VPO**: virtual page offset.
+
+**PPN**: physical page number.
+
+**PPO**: physical page offset.
+
+### TLB
+
+Page table is stored in memory, thus every time the translation from VMA to PMA needs to read the PTE in physical memory first. If the PTE is not cached in cache, the cost is expensive. To eliminate this cost, many system add a small cache of PTEs in MMU called a **translation lookaside buffer**.
+
+TLB is set-associative  hardware cache, and it maps  VPN to PPN.
+
+```
++-------+-------+------+
+| TLBT  | TLBI  | VPO  |
++-------+-------+------+
+|<-----VPN----->|
+
+*TLBT*: TLB tag
+*TLBI*: TLB index
+```
+
+TLB needs to be clear, when switch from a process to another process. In practice, we add a filed in TPEs to distinguish different processes.
+
+### Multi-Level Page Tables
+
+Virtual Memory can be very large, thus the page table will be very large too. The common approach is to use hierarchy of page table.
+
+```
++--------+--------+--------+-----+
+| VP1    | VP2    | VP3    | VPO |
++---+----+---+----+---+----+--+--+
+    |        |        |       |
+    V        V        V       |
+ +----+   +----+   +----+     |
+ | L1 +-->| L2 +-->| L3 |     |
+ +----+   +----+   +--+-+     |
+                      |       |
+                      V       V
+        +-------------+-----+-+---+
+        |     PPN           | PPO |
+        +-------------------+-----+
+```
+
+If a PTE in the level 1 table is null, then the corresponding level 2 page table does not have to exist.
+Only the level 1 table needs to be in main memory at all times. Page tables in other level can be created and paged in and out by the VM system as they are needed.
+
+### Summary
+
+TLB is to reduce time cost of VM, and multi-level page table is to reduce the memory cost of VM.
+
+#### Trick for speeding up
+
+```
+PA
+  +-------------------------------------+
+  |                                     V
++-------+------+-------+         +------------+       
+| CT    |  CI  |  CO   |         |  Tag Check |       
++-------+------+-------+         +------------+
++-------+--------------+           ^  ^  ^  ^
+| PPN   |    PPO       |           |  |  |  |
++---+---+---------+----+         +------------+
+    ^             ^              |   Cache    | 
+    |             |              +-------+----+  
+ Address          | no                   ^
+Translation       | change               |
+    |             |                      | read line
++---+---+---------+----+                 |
+| VPN   |    VPO       |-----------------+
++-------+--------------+
+VA
+```
+
+We can index into cache while address translation taking place. After that, we check the PPN with the tag in cache.
+
+## Core i7 / Linux VM System
+
+### Linux Virtual Memory Areas
+
+Linux organizes the virtual memory as a collection of areas. An area is a contiguous chunk of existing virtual memory whose pages are related in some way. For example, code segment and data segment are distinct areas. 
+
+In the paging fault exception handling, the handler will first check if the virtual address is in one of the areas.
+
+
+## Memory Mapping
+
+Linux initializes the contents of a virtual memory area by associating it with an object on disk. Areas can be mapped to one of two types of objects:
+ - Regular file in the Linux files system: 
+    The file section is divided into page-size pieces, with each piece containing the initial content of a virtual page.
+    
+ - Anonymous file.
+   
+
+An object can be mapped into an area of virtual memory as either a shared object or a private object.
+Private object are mapped into virtual memory using a clever technique called **copy-on-write**. A private object begins life in the same way as shared object. The PTEs for the corresponding private area are flagged as read-only, and the area is flagged as private copy-on-write. If one process attempts to write to some of the shared private object, then the write triggers a protection fault.The fault handler creates a new copy of the page in physical memory, and updates the PTE to point to the new copy.
+
 ## Dynamic Memory Allocation
 
 ### The *malloc* Package
