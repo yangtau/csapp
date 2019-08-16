@@ -1,5 +1,46 @@
 # Chapter 9 Virtual Memory
 
+## Concepts
+
+Process provides each program with two key abstraction:
+
+- Logical control flow
+- Private address space
+
+Every process has it own virtual address space, and one process cannot access other's space.
+
+### Caching
+
+Conceptually, virtual memory is an array of N contiguous bytes stored on disk.
+
+Disk is about 10000 times slower than DRAM, so DRAM cache organization driven by the enormous miss penalty. 
+
+- Virtual pages tend to be large.
+- Fully associated: any virtual page can be placed in any physical page.
+- Write-back instead write-through.
+
+Virtual address need to be translated into physical address by *MMU*(memory management unit), and the data structure storing mapping from virtual address to physical address is called *page table*.
+
+Page table is an array of *page table entries*(PTEs) which consists of *valid bit*, n-bit address field, pointer to file in disk, and maybe some other information.
+
+*Page hit*: reference to VM word that is in physical memory.
+
+*Page fault*: reference to VM word that is not in physical memory.
+
+Transferring a page between disk and memory is known as *swapping* or *paging*. The strategy of waiting until the last moment to swap in a page, when a miss occurs, is known as *demand paging*.
+
+### Memory Management
+
+VM greatly simplified memory management. OS provide a separate page table, and thus **a separate virtual address space**, for each process. Moreover, multiple virtual pages can be mapped to the same shared physical page.
+
+- Simplifying loading. Loader allocates virtual pages for code and data segments, marks them as invalid, and points their PTEs to the appropriate position in the object file. Due to demand paging, the loader never really copies any data from disk into memory.
+- Simplifying sharing. Multiple processes shared a single copy of shared libraries by mapping the appropriate virtual pages in different processes to the same physical pages.
+- Simplifying allocation. If a process ask for large contiguous memory which can be allocated directly from physical memory, OS simply maps contiguous virtual pages to discontiguous physical pages.
+
+### Memory protection
+
+VM provide a natural way to protect memory. First of all, providing separate virtual address space make it easy to isolate private memories of different processes. Moreover, to control access to a virtual page, we can add some additional permission bits to the PTE. Every time CPU genrates an address, MMU can check if the access is legal.
+
 ## Dynamic Memory Allocation
 
 ### The *malloc* Package

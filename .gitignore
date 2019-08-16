@@ -1,4 +1,6 @@
 *.tar
+*.o
+*.out
 .vscode/*
 *.pdf
 */.vscode/*
