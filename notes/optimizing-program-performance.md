@@ -13,7 +13,7 @@ int *xp, *yp;
 *xp = 2 * *yp;
 ```
 
-The behaviours of `a` and `b` are different if `yp` and `xp` reference to the same position in memory.
+The behaviors of `a` and `b` are different if `yp` and `xp` reference to the same position in memory.
 
 ```c
 void sum_row(double *a, double *b, long n) {
@@ -92,7 +92,7 @@ Even though *poly1.c* requires more operations, it runs fast than *poly2.c*. The
 
 In *poly1.c*, `a[i] * xpwr; xpwr = x * xpwr;` can be computed simultaneously, and they do not depend on `res`. The updating of `res` only requires an addition. So the time of every iteration is just the time of a multiplication of double.
 
-In *poly2.c*, `res = res * x + a[i]` requires `res` int previous iteration, and multiplication and addition cannot be processed simultaneously. Thus, the time of every iterations is the time of a multiplication and a addition.
+In *poly2.c*, `res = res * x + a[i]` requires `res` int previous iteration, and multiplication and addition cannot be processed simultaneously. Thus, the time of every iterations is the time of a multiplication and an addition.
 
 ## Loop Unrolling
 
