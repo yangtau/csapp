@@ -8,10 +8,10 @@
             "type": "gdb",
             "request": "launch",
             "name": "gdb",
-            "target": "csim",
+            "target": "tracegen",
             "cwd": "${workspaceRoot}",
             "valuesFormatting": "parseText",
-            "arguments": "-v -s 4 -E 1 -b 4 -t traces/yi.trace"
+            "arguments": " -M 8 -N 8 -F 3"
         },
     ]
 }
