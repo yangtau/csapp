@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "benchmark.h": "c",
+        "stdlib.h": "c",
+        "mm.h": "c",
+        "memlib.h": "c"
+    }
+}
