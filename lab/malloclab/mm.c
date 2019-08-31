@@ -1,8 +1,6 @@
 /*
  * mm.c - The fastest, least memory-efficient malloc package.
  *
- * TODO:
- * change some char* to void*
  */
 #include <assert.h>
 #include <stdint.h>
@@ -80,10 +78,13 @@ free block
 #define MINIMUM_BLOCK_SIZE (SIZE_T_SIZE * 2 + PTR_SIZE * 2)
 
 /*
- * Given the size needed, complute the real size of
- * a block including header and padding
+ * Given the size needed, complute the real size of a block including header,
+ * padding and the limitation of mininum block
  */
-#define REAL_SIZE(size) (ALIGN((size) + SIZE_T_SIZE))
+#define REAL_SIZE(size)                               \
+    (ALIGN((size) + SIZE_T_SIZE) < MINIMUM_BLOCK_SIZE \
+         ? MINIMUM_BLOCK_SIZE                         \
+         : ALIGN((size) + SIZE_T_SIZE))
 
 /*
  * Pack size , allocated bit and previous allocated bit into a word.
@@ -208,6 +209,8 @@ static void *extend_heap(size_t size) {
     // new epilogue header
     PUT(GET_HEAD(GET_NEXT(bp)), size_t, PACK(0, 1, 0));
 
+    // I do not know why return coalesce(bp) is better than return bp directly
+    // in space utilization and throughput.
     DEBUG_RETURN(coalesce(bp));
 }
 
@@ -258,11 +261,8 @@ int mm_init(void) {
  */
 void *mm_malloc(size_t size) {
     void *free_block = GET_BLOCK(mm_heap_start);
-    // TODO: abs
     size_t real_size = REAL_SIZE(size);
-    if (real_size < MINIMUM_BLOCK_SIZE) {
-        real_size = MINIMUM_BLOCK_SIZE;
-    }
+
 #ifdef BEST_FIT
     void *best_free_block = NULL;
     size_t best_size_diff = 0x7fffffff;
@@ -303,7 +303,6 @@ void *mm_malloc(size_t size) {
     if (free_block == NULL) {
         DEBUG_RETURN(NULL);
     }
-
     free_list_remove(free_block);
     UPDATE_ALLOC(GET_HEAD(free_block), 1);
     UPDATE_ALLOC_PREV(GET_HEAD(GET_NEXT(free_block)), 1);
@@ -328,6 +327,7 @@ void mm_free(void *ptr) {
  */
 void *mm_realloc(void *ptr, size_t size) {
     size_t old_size = GET_SIZE(GET_HEAD(ptr));
+    size_t real_size = REAL_SIZE(size);
 
     // Case 1: `ptr` is NULL
     if (ptr == NULL) {
@@ -339,20 +339,12 @@ void *mm_realloc(void *ptr, size_t size) {
         mm_free(ptr);
         DEBUG_RETURN(NULL);
     }
-
-    // TODO: abstraction
-    // align size
-    size_t real_size = REAL_SIZE(size);
-    if (real_size < MINIMUM_BLOCK_SIZE) {
-        real_size = MINIMUM_BLOCK_SIZE;
-    }
-
     // Case 3: size is smaller than or equal to the size before
     if (real_size <= old_size) {
         DEBUG_RETURN(ptr);
     }
 
-    // Case 4: size if bigger than before
+    // Case 4: size if bigger than the size before
     void *newptr;
     size_t copySize = old_size;
 
