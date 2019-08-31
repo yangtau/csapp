@@ -1,13 +1,8 @@
 /*
- * mm-naive.c - The fastest, least memory-efficient malloc package.
+ * mm.c - The fastest, least memory-efficient malloc package.
  *
- * In this naive approach, a block is allocated by simply incrementing
- * the brk pointer.  A block is pure payload. There are no headers or
- * footers.  Blocks are never coalesced or reused. Realloc is
- * implemented directly using mm_malloc and mm_free.
- *
- * NOTE TO STUDENTS: Replace this header comment with your own header
- * comment that gives a high level description of your solution.
+ * TODO:
+ * change some char* to void*
  */
 #include <assert.h>
 #include <stdint.h>
@@ -58,6 +53,17 @@ free block
 
 // #define DEBUG
 #define VERBOSE 1
+
+#ifdef DEBUG
+#define DEBUG_RETURN(args)                              \
+    {                                                   \
+        mm_check_heap(__FUNCTION__, __LINE__, VERBOSE); \
+        return args;                                    \
+    }
+#else  // DEBUG
+#define DEBUG_RETURN(args) \
+    { return args; }
+#endif  // DEBUG
 
 /* single word (4) or double word (8) alignment */
 #define ALIGNMENT 8
@@ -215,13 +221,10 @@ static void *coalesce(char *bp) {
         UPDATE_SIZE(GET_HEAD(bp), new_size);  // update size in header
         UPDATE_SIZE(GET_FOOT(bp), new_size);  // update size in footer
     }
-#ifdef DEBUG
-    mm_check_heap(__func__, __LINE__, VERBOSE);
-#endif
-    return bp;
+    DEBUG_RETURN(bp);
 }
 
-// Extend heap and return the last free block after extending
+// Extend heap and return the last block after extending
 static void *extend_heap(size_t size) {
     char *bp = mem_sbrk(size);
     if (bp == (void *)-1) {
@@ -235,13 +238,7 @@ static void *extend_heap(size_t size) {
     // new epilogue header
     PUT(GET_HEAD(GET_NEXT(bp)), size_t, PACK(0, 1, 0));
 
-    // insert bp into free list
-    free_list_insert(bp);
-
-#ifdef DEBUG
-    mm_check_heap(__func__, __LINE__, VERBOSE);
-#endif
-    return coalesce(bp);
+    DEBUG_RETURN(coalesce(bp));
 }
 
 // Split free block, and insert the remind part into free list
@@ -297,6 +294,7 @@ int mm_init(void) {
  */
 void *mm_malloc(size_t size) {
     char *free_block = GET_BLOCK(mm_heap_start);
+    // TODO: abs
     size_t real_size = REAL_SIZE(size);
     if (real_size < MINIMUM_BLOCK_SIZE) {
         real_size = MINIMUM_BLOCK_SIZE;
@@ -308,23 +306,21 @@ void *mm_malloc(size_t size) {
             UPDATE_ALLOC(GET_HEAD(free_block), 1);
             UPDATE_ALLOC_PREV(GET_HEAD(GET_NEXT(free_block)), 1);
             free_list_remove(free_block);
-            return free_block;
+            DEBUG_RETURN(free_block);
         }
     }
+
     // need to extend heap
     free_block = extend_heap(real_size);
     if (free_block == NULL) {
         // failed to extend heap
         return NULL;
     }
-    split(free_block, real_size);
+
     free_list_remove(free_block);
     UPDATE_ALLOC(GET_HEAD(free_block), 1);
     UPDATE_ALLOC_PREV(GET_HEAD(GET_NEXT(free_block)), 1);
-#ifdef DEBUG
-    mm_check_heap(__func__, __LINE__, VERBOSE);
-#endif
-    return free_block;
+    DEBUG_RETURN(free_block);
 }
 
 /*
@@ -337,31 +333,51 @@ void mm_free(void *ptr) {
     UPDATE_ALLOC_PREV(GET_HEAD(GET_NEXT(ptr)), 0);
     free_list_insert(ptr);
     coalesce(ptr);
-#ifdef DEBUG
-    mm_check_heap(__func__, __LINE__, VERBOSE);
-#endif
+    DEBUG_RETURN();
 }
 
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
  */
 void *mm_realloc(void *ptr, size_t size) {
-    void *oldptr = ptr;
+    size_t old_size = GET_SIZE(GET_HEAD(ptr));
+
+    // Case 1: `ptr` is NULL
+    if (ptr == NULL) {
+        DEBUG_RETURN(mm_malloc(size));
+    }
+
+    // Case 2: size == 0
+    if (size == 0) {
+        mm_free(ptr);
+        DEBUG_RETURN(NULL);
+    }
+
+    // TODO: abstraction
+    // align size
+    size_t real_size = REAL_SIZE(size);
+    if (real_size < MINIMUM_BLOCK_SIZE) {
+        real_size = MINIMUM_BLOCK_SIZE;
+    }
+
+    // Case 3: size is smaller than or equal to the size before
+    if (real_size <= old_size) {
+        DEBUG_RETURN(ptr);
+    }
+
+    // Case 4: size if bigger than before
     void *newptr;
-    size_t copySize;
+    size_t copySize = old_size;
 
     newptr = mm_malloc(size);
     if (newptr == NULL)
         return NULL;
-    copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
     if (size < copySize)
         copySize = size;
-    memcpy(newptr, oldptr, copySize);
-    mm_free(oldptr);
-#ifdef DEBUG
-    mm_check_heap(__func__, __LINE__, VERBOSE);
-#endif
-    return newptr;
+
+    memcpy(newptr, ptr, copySize);
+    mm_free(ptr);
+    DEBUG_RETURN(newptr);
 }
 
 static void check_block(void *bp, const char *func, int line) {
@@ -398,39 +414,3 @@ void mm_check_heap(const char *func, int line, int verbose) {
         printf("Error: bad epilogue header.Func: %s,line: %d\n", func, line);
     }
 }
-
-// #define TEST
-#ifdef TEST
-
-#define ASSERT(a)                                                        \
-    do {                                                                 \
-        if (!(a)) {                                                      \
-            fprintf(stderr, "Failed to assert in line: %d\n", __LINE__); \
-            exit(-1);                                                    \
-        }                                                                \
-    } while (0);
-
-void test() {
-    mm_init();
-    char *p[6];
-    size_t sizes[] = {2024, 2024, 48, 4072, 4072, 4072};
-
-    p[0] = mm_malloc(sizes[0]);
-    p[1] = mm_malloc(sizes[1]);
-
-    mm_free(p[1]);
-
-    p[2] = mm_malloc(sizes[2]);
-    p[3] = mm_malloc(sizes[3]);
-    mm_free(p[3]);
-    p[4] = mm_malloc(sizes[4]);
-    mm_free(p[2]);
-    mm_free(p[0]);
-    p[5] = mm_malloc(sizes[5]);
-    mm_free(p[4]);
-    mm_free(p[5]);
-}
-int main() {
-    test();
-}
-#endif
