@@ -49,7 +49,7 @@ free block
 +------------+
 */
 
-#define DEBUG
+// #define DEBUG
 #define VERBOSE 1
 #define BEST_FIT  // best fit
 
@@ -364,9 +364,8 @@ static void *realloc_coalesce(void *bp, size_t size) {
         DEBUG_RETURN(bp);
     }
 
-    // Coalesce with previous block
     if (!GET_ALLOC_PREV(GET_HEAD(bp))) {
-        void *prev_bp = GET_PREV(GET_HEAD(bp));
+        void *prev_bp = GET_PREV(bp);
         new_size += GET_SIZE(GET_HEAD(prev_bp));
 
         free_list_remove(prev_bp);
@@ -376,6 +375,25 @@ static void *realloc_coalesce(void *bp, size_t size) {
         DEBUG_RETURN(prev_bp);
     }
     DEBUG_RETURN(bp);
+}
+
+// bp is not free block
+static void realloc_split(void *bp, size_t size) {
+    DEBUG_ENTER();
+    size_t old_size = GET_SIZE(GET_HEAD(bp));
+
+    if (old_size < size + MINIMUM_BLOCK_SIZE) {
+        DEBUG_RETURN();
+    }
+
+    UPDATE_SIZE(GET_HEAD(bp), size);
+
+    void *next_bp = GET_NEXT(bp);
+    PUT(GET_HEAD(next_bp), size_t, PACK(old_size - size, 1, 0));
+    PUT(GET_FOOT(next_bp), size_t, PACK(old_size - size, 0, 0));
+
+    free_list_insert(next_bp);
+    DEBUG_RETURN();
 }
 
 /*
@@ -402,26 +420,23 @@ void *mm_realloc(void *ptr, size_t size) {
     }
 
     // Case 4: size if bigger than the size before
-    void *oldptr = ptr;
     void *newptr = realloc_coalesce(ptr, real_size);
 
     if (GET_SIZE(GET_HEAD(newptr)) >= real_size) {
         memmove(newptr, ptr, old_size);
+        // It will cause mem_sbrk failed.
+        // realloc_split(newptr, real_size + MINIMUM_BLOCK_SIZE * 40);
+        DEBUG_RETURN(newptr);
+    } else {
+        newptr = mm_malloc(size);
+        if (newptr == NULL) {
+            DEBUG_RETURN(NULL);
+        }
+
+        memcpy(newptr, ptr, old_size);
+        mm_free(ptr);
         DEBUG_RETURN(newptr);
     }
-    size_t copySize = old_size;
-
-    newptr = mm_malloc(size);
-    if (newptr == NULL) {
-        DEBUG_RETURN(NULL);
-    }
-
-    if (size < copySize) {
-        copySize = size;
-    }
-    memcpy(newptr, ptr, copySize);
-    mm_free(ptr);
-    DEBUG_RETURN(newptr);
 }
 
 /* print_free: print info about free blocks in free list */

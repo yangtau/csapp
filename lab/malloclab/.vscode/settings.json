@@ -3,6 +3,7 @@
         "benchmark.h": "c",
         "stdlib.h": "c",
         "mm.h": "c",
-        "memlib.h": "c"
+        "memlib.h": "c",
+        "config.h": "c"
     }
 }
