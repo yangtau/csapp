@@ -54,14 +54,32 @@ free block
 #define BEST_FIT  // best fit
 
 #ifdef DEBUG
+// debug return
 #define DEBUG_RETURN(args)                              \
     do {                                                \
         mm_check_heap(__FUNCTION__, __LINE__, VERBOSE); \
+        printf("DEBUG_RETURN: %s\n\n", __FUNCTION__);       \
         return args;                                    \
     } while (0)
+// debug enter
+#define DEBUG_ENTER()                            \
+    do {                                         \
+        printf("DEBUG_ENTER: %s\n", __FUNCTION__); \
+    } while (0)
+
 #else  // DEBUG
+
+// debug return
 #define DEBUG_RETURN(args) \
-    { return args; }
+    do {                   \
+        return args;       \
+    } while (0)
+
+// debug enter
+#define DEBUG_ENTER() \
+    do {              \
+    } while (0)
+
 #endif  // DEBUG
 
 /* single word (4) or double word (8) alignment */
@@ -148,7 +166,7 @@ free block
 static char *mm_heap_start = NULL;
 
 // Given block ptr bp, insert it into free block list
-static void free_list_insert(void *bp) {
+static inline void free_list_insert(void *bp) {
     void *first_bp = GET_BLOCK(mm_heap_start);
     void *second_bp = GET_SUCC(first_bp);
     PUT(GET_SUCC_P(bp), void *, second_bp);
@@ -160,7 +178,7 @@ static void free_list_insert(void *bp) {
 }
 
 // Given free block ptr bp, remove it from free block list
-static void free_list_remove(void *bp) {
+static inline void free_list_remove(void *bp) {
     void *predecessor = GET_PRED(bp);
     void *successor = GET_SUCC(bp);
     if (predecessor != NULL)
@@ -172,6 +190,7 @@ static void free_list_remove(void *bp) {
 // Coalesce adjoint free blocks with @bp, and return the free block after
 // coalescing.
 static void *coalesce(void *bp) {
+    DEBUG_ENTER();
     // Coalesce with previous block
     while (!GET_ALLOC_PREV(GET_HEAD(bp))) {
         free_list_remove(bp);  // remove bp from the free list
@@ -197,6 +216,7 @@ static void *coalesce(void *bp) {
 
 // Extend heap and return the last block after extending
 static void *extend_heap(size_t size) {
+    DEBUG_ENTER();
     void *bp = mem_sbrk(size);
     if (bp == (void *)-1) {
         DEBUG_RETURN(NULL);
@@ -209,6 +229,8 @@ static void *extend_heap(size_t size) {
     // new epilogue header
     PUT(GET_HEAD(GET_NEXT(bp)), size_t, PACK(0, 1, 0));
 
+    free_list_insert(bp);
+
     // I do not know why return coalesce(bp) is better than return bp directly
     // in space utilization and throughput.
     DEBUG_RETURN(coalesce(bp));
@@ -216,6 +238,7 @@ static void *extend_heap(size_t size) {
 
 // Split free block, and insert the remind part into free list
 static void split(void *bp, size_t size) {
+    DEBUG_ENTER();
     if (GET_SIZE(GET_HEAD(bp)) < size + MINIMUM_BLOCK_SIZE) {
         DEBUG_RETURN();
     }
@@ -236,6 +259,7 @@ static void split(void *bp, size_t size) {
  * mm_init - initialize the malloc package.
  */
 int mm_init(void) {
+    DEBUG_ENTER();
     mem_init();
     mm_heap_start = mem_heap_lo();
 
@@ -260,6 +284,7 @@ int mm_init(void) {
  *     Always allocate a block whose size is a multiple of the alignment.
  */
 void *mm_malloc(size_t size) {
+    DEBUG_ENTER();
     void *free_block = GET_BLOCK(mm_heap_start);
     size_t real_size = REAL_SIZE(size);
 
@@ -313,6 +338,7 @@ void *mm_malloc(size_t size) {
  * mm_free - Freeing a block does nothing.
  */
 void mm_free(void *ptr) {
+    DEBUG_ENTER();
     UPDATE_ALLOC(GET_HEAD(ptr), 0);
     PUT(GET_FOOT(ptr), size_t, PACK(GET_SIZE(GET_HEAD(ptr)), 0, 0));
     UPDATE_ALLOC(GET_HEAD(ptr), 0);
@@ -322,10 +348,42 @@ void mm_free(void *ptr) {
     DEBUG_RETURN();
 }
 
+static void *realloc_coalesce(void *bp, size_t size) {
+    DEBUG_ENTER();
+    size_t new_size = GET_SIZE(GET_HEAD(bp));
+    while (!GET_ALLOC(GET_HEAD(GET_NEXT(bp))) && new_size < size) {
+        void *next_bp = GET_NEXT(bp);
+        new_size += GET_SIZE(GET_HEAD(next_bp));
+
+        free_list_remove(next_bp);
+
+        UPDATE_SIZE(GET_HEAD(bp), new_size);  // update size in header
+    }
+    UPDATE_ALLOC_PREV(GET_HEAD(GET_NEXT(bp)), 1);
+    if (new_size >= size) {
+        DEBUG_RETURN(bp);
+    }
+
+    // Coalesce with previous block
+    // if (!GET_ALLOC_PREV(GET_HEAD(bp))) {
+    //     void *prev_bp = bp;
+    //     while (!GET_ALLOC_PREV(GET_HEAD(prev_bp))) {
+    //         prev_bp = GET_PREV(GET_HEAD(prev_bp));
+    //         new_size += GET_SIZE(GET_HEAD(prev_bp));
+    //         free_list_remove(prev_bp);
+    //     }
+    //     UPDATE_SIZE(GET_HEAD(prev_bp), new_size);
+    //     UPDATE_ALLOC(GET_HEAD(prev_bp), 1);
+    //     DEBUG_RETURN(prev_bp);
+    // }
+    DEBUG_RETURN(bp);
+}
+
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
  */
 void *mm_realloc(void *ptr, size_t size) {
+    DEBUG_ENTER();
     size_t old_size = GET_SIZE(GET_HEAD(ptr));
     size_t real_size = REAL_SIZE(size);
 
@@ -345,7 +403,13 @@ void *mm_realloc(void *ptr, size_t size) {
     }
 
     // Case 4: size if bigger than the size before
-    void *newptr;
+    void *oldptr = ptr;
+    void *newptr = realloc_coalesce(ptr, real_size);
+
+    if (GET_SIZE(GET_HEAD(newptr)) >= real_size) {
+        memmove(newptr, ptr, old_size);
+        DEBUG_RETURN(newptr);
+    }
     size_t copySize = old_size;
 
     newptr = mm_malloc(size);
