@@ -8,7 +8,8 @@
             "name": "Debug",
             "type": "gdb",
             "request": "launch",
-            "target": "mm",
+            "target": "mdriver",
+            "arguments": "-f traces/3realloc2-bal.rep",
             "cwd": "${workspaceRoot}",
             "valuesFormatting": "parseText"
         }

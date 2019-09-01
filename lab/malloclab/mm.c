@@ -49,7 +49,7 @@ free block
 +------------+
 */
 
-// #define DEBUG
+#define DEBUG
 #define VERBOSE 1
 #define BEST_FIT  // best fit
 
@@ -58,12 +58,12 @@ free block
 #define DEBUG_RETURN(args)                              \
     do {                                                \
         mm_check_heap(__FUNCTION__, __LINE__, VERBOSE); \
-        printf("DEBUG_RETURN: %s\n\n", __FUNCTION__);       \
+        printf("DEBUG_RETURN: %s\n\n", __FUNCTION__);   \
         return args;                                    \
     } while (0)
 // debug enter
-#define DEBUG_ENTER()                            \
-    do {                                         \
+#define DEBUG_ENTER()                              \
+    do {                                           \
         printf("DEBUG_ENTER: %s\n", __FUNCTION__); \
     } while (0)
 
@@ -191,26 +191,26 @@ static inline void free_list_remove(void *bp) {
 // coalescing.
 static void *coalesce(void *bp) {
     DEBUG_ENTER();
+    size_t new_size = GET_SIZE(GET_HEAD(bp));
+
     // Coalesce with previous block
-    while (!GET_ALLOC_PREV(GET_HEAD(bp))) {
+    if (!GET_ALLOC_PREV(GET_HEAD(bp))) {
         free_list_remove(bp);  // remove bp from the free list
-        size_t new_size = GET_SIZE(GET_HEAD(bp));
         bp = GET_PREV(bp);
         new_size += GET_SIZE(GET_HEAD(bp));
-
         UPDATE_SIZE(GET_HEAD(bp), new_size);  // update size in header
-        UPDATE_SIZE(GET_FOOT(bp), new_size);  // update size in footer
     }
+
     // Coalesce with next block
-    while (!GET_ALLOC(GET_HEAD(GET_NEXT(bp)))) {
-        void *next_bp = GET_NEXT(bp);
+    void *next_bp = GET_NEXT(bp);
+    if (!GET_ALLOC(GET_HEAD(next_bp))) {
         free_list_remove(next_bp);
-
-        size_t new_size = GET_SIZE(GET_HEAD(next_bp)) + GET_SIZE(GET_HEAD(bp));
-
+        new_size += GET_SIZE(GET_HEAD(next_bp));
         UPDATE_SIZE(GET_HEAD(bp), new_size);  // update size in header
-        UPDATE_SIZE(GET_FOOT(bp), new_size);  // update size in footer
     }
+
+    UPDATE_SIZE(GET_FOOT(bp), new_size);  // update size in footer
+
     DEBUG_RETURN(bp);
 }
 
@@ -351,7 +351,7 @@ void mm_free(void *ptr) {
 static void *realloc_coalesce(void *bp, size_t size) {
     DEBUG_ENTER();
     size_t new_size = GET_SIZE(GET_HEAD(bp));
-    while (!GET_ALLOC(GET_HEAD(GET_NEXT(bp))) && new_size < size) {
+    if (!GET_ALLOC(GET_HEAD(GET_NEXT(bp)))) {
         void *next_bp = GET_NEXT(bp);
         new_size += GET_SIZE(GET_HEAD(next_bp));
 
@@ -365,17 +365,16 @@ static void *realloc_coalesce(void *bp, size_t size) {
     }
 
     // Coalesce with previous block
-    // if (!GET_ALLOC_PREV(GET_HEAD(bp))) {
-    //     void *prev_bp = bp;
-    //     while (!GET_ALLOC_PREV(GET_HEAD(prev_bp))) {
-    //         prev_bp = GET_PREV(GET_HEAD(prev_bp));
-    //         new_size += GET_SIZE(GET_HEAD(prev_bp));
-    //         free_list_remove(prev_bp);
-    //     }
-    //     UPDATE_SIZE(GET_HEAD(prev_bp), new_size);
-    //     UPDATE_ALLOC(GET_HEAD(prev_bp), 1);
-    //     DEBUG_RETURN(prev_bp);
-    // }
+    if (!GET_ALLOC_PREV(GET_HEAD(bp))) {
+        void *prev_bp = GET_PREV(GET_HEAD(bp));
+        new_size += GET_SIZE(GET_HEAD(prev_bp));
+
+        free_list_remove(prev_bp);
+
+        UPDATE_SIZE(GET_HEAD(prev_bp), new_size);
+        UPDATE_ALLOC(GET_HEAD(prev_bp), 1);
+        DEBUG_RETURN(prev_bp);
+    }
     DEBUG_RETURN(bp);
 }
 
