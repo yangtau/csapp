@@ -10,9 +10,9 @@ An **Exception** is an abrupt change in the control in response to some change i
 
 ### Exception Handling
 
-Every exception is assigned a unique nonnegative integer **exception number**. **Exception table** maps from exception number to the start address of the corresponding exception handler.
+Every exception is assigned an unique nonnegative integer **exception number**. **Exception table** maps from exception number to the start address of the corresponding exception handler.
 
-When the processor detects that an event has occurred and determines the corresponding exception number. The processor then makes an indirect procedure call, through the entry in exception table, to the corresponding handler.
+When the processor detects that an event has occurred, it determines the corresponding exception number. The processor then makes an indirect procedure call, through the entry in exception table, to the corresponding handler.
 
 There are some differences between an exception and a procedure call:
 
@@ -34,7 +34,7 @@ There are some differences between an exception and a procedure call:
 
 A process is an instance of a program in execution.
 
-Each program in the system runs in the context of some process. The context consists of the state that the program needs to run correctly, which includes the program's code and date in memory, stack, contents of its general-purpose registers, program counter, enviornment variables, and the set of open file descriptors. The context of a process is adequate for restarting the process.
+Each program in the system runs in the context of some process. The context consists of the state that the program needs to run correctly, which includes the program's code and date in memory, stack, contents of its general-purpose registers, program counter, environment variables, and the set of open file descriptors. The context of a process is adequate for restarting the process.
 
 Processes provide application with two key abstraction:
 
@@ -58,6 +58,50 @@ Context switch includes 3 steps:
 - saves the context of the current process
 - restores the saved context of some previously preempted process
 - passes control to this newly restored process
+
+### Process Control in Linux
+
+#### fork
+
+- Call once, return twice.
+- Concurrent execution.
+- Duplicate but separate address spaces.
+- Shared files.
+
+```c
+// return 0 to child
+// return PID of child to parent
+// -1 on error
+pid_t fork(void);
+```
+
+
+#### wait
+
+After a process terminated, it is kept in a terminated state until it is reaped by its parent. A terminated process that has not been reaped yet is called a *zombie*. 
+
+When a parent process terminates, the *inti* process (with a PID of 1) becomes the adopted parent of any orphaned children.
+
+```c
+// Return PID of child if OK, 0 (if WNOHANG), or 1 on error
+pid_t waitpid(pid_t pid, int *status, int options);
+
+```
+
+`pid`
+
+- If `pid` > 0, then the wait set is the singleton child process with PID of `pid`.
+
+- If `pid` = -1, then the wait set consists of all child processes.
+
+#### execve
+
+```c
+int execve(const char *filename, const char *argv[], const char *envp[]);
+// Call once and never returns unless there is an error
+```
+
+
 
 ## Signals
 
