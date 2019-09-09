@@ -92,10 +92,6 @@ int main(int argc, char **argv) {
     char cmdline[MAXLINE];
     int emit_prompt = 1; /* emit prompt (default) */
 
-    if (setpgid(0, 0) < 0) {
-        unix_error("main: setpgid error\n");
-    }
-
     /* Redirect stderr to stdout (so that driver will get all output
      * on the pipe connected to stdout) */
     dup2(1, 2);
@@ -185,9 +181,12 @@ void eval(char *cmdline) {
         return;
     }
     if (pid == 0) {  // child runs user job
+        // FIXME: is it neccessay to create a new process group id?
         // set unique process group id
         if (setpgid(0, 0) < 0) {
+            unix_error("eval0) {
             unix_error("eval: setpgid error\n");
+        }: setpgid error\n");
         }
         do_bgfg(argv);
     } else {  // parent waits for foreground job to terminate
@@ -365,7 +364,10 @@ void waitfg(pid_t pid) {
  *     currently running children to terminate.
  */
 void sigchld_handler(int sig) {
-    // printf("here: child handler\n");
+    /* TODO: 1. remove printf which is not async-signal-safe
+     *       2. protect access to shared global data structures by blocking all signals
+     *       3. 
+     */
     for (int i = 0; i < MAXJOBS; i++) {
         if (jobs[i].pid != 0 && jobs[i].state == BG) {
             int status, res;
