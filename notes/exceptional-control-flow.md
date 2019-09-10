@@ -85,7 +85,6 @@ When a parent process terminates, the *inti* process (with a PID of 1) becomes t
 ```c
 // Return PID of child if OK, 0 (if WNOHANG), or 1 on error
 pid_t waitpid(pid_t pid, int *status, int options);
-
 ```
 
 `pid`
@@ -101,8 +100,6 @@ int execve(const char *filename, const char *argv[], const char *envp[]);
 // Call once and never returns unless there is an error
 ```
 
-
-
 ## Signals
 
 A signal is a small message that notifies a process that an event of some type has occurred in the system.
@@ -111,9 +108,55 @@ A signal is a small message that notifies a process that an event of some type h
 
 The kernel sends a signal by updating some state in the context of the destination process.
 
+```c
+int kill(pid_t pid, int sig);
+// If pid is 0, then the kill sends signal sig to every process in the process group of the calling preocess.
+```
+
 ### Receiving Signals
 
 The kernel checks the set of unblocked pending signals(pending & ~blocked) for a process p, when it switch p from kernel mode to user mode.
 If the set is not empty, then the kernel forces p to receive a signal in the set. The receipt of the signal triggers some action by the process. After that, control passes back to the next instruction in the logical flow.
 
+```c
+typedef void (*sighandler_t)(int);
+
+sighandler_t signal(int signum, sighandler_t handler);
+// Return the old handler if OK, else SIG_ERR.
+// The default actions of SIGSTOP and SIGKILL cannot be changed.
+```
+
+Signal handlers can be interrupted by other handlers, but the signal number of current handler will be blocked.
+
+### Safe Signal Handling
+
+Signal handlers are tricky because they can run concurrently with the main
+program and with each other. 
+
+Some tips about writing handler:
+
+- Keep handlers simple.
+
+- Call only async-signal-safe functions.
+
+- Save and restore *errno* (if functions that may set *errno* are called).
+
+- Protect accesses to shared global data structures by blocking all signalsi
+  (handlers can be interrupted by other handler).  
+
+-  Declare global variables with `volatile`. The key word `volatile` tells
+   compiler to read variables in memory every time they are are referenced.
+
+- Declare flags with `sig_atomic_t`.
+
+
+Note:
+
+- The existance of a pending singal merely indicates that at least one signal
+  has arrived. Signals cannot be used to count the occurrence of events in other
+  processes.
+
+- Synchronizing flows to avoid nasty concurrency bugs.
+
+- Using `sigsuspend` to explicitly wait for signals.
 
