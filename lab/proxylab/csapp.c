@@ -20,7 +20,6 @@
  */
 /* $begin csapp.c */
 #include "csapp.h"
-
 /************************** 
  * Error-handling functions
  **************************/
