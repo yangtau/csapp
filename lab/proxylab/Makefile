@@ -13,17 +13,20 @@ all: proxy
 csapp.o: csapp.c csapp.h
 	$(CC) $(CFLAGS) -c csapp.c
 
+queue.o: queue.c queue.h csapp.h
+	$(CC) $(CFLAGS) -c queue.c
+
 proxy.o: proxy.c csapp.h
 	$(CC) $(CFLAGS) -c proxy.c
 
 proxy: proxy.o csapp.o
 	$(CC) $(CFLAGS) proxy.o csapp.o -o proxy $(LDFLAGS)
 
-# Creates a tarball in ../proxylab-handin.tar that you can then
-# hand in. DO NOT MODIFY THIS!
-handin:
-	(make clean; cd ..; tar cvf $(USER)-proxylab-handin.tar proxylab-handout --exclude tiny --exclude nop-server.py --exclude proxy --exclude driver.sh --exclude port-for-user.pl --exclude free-port.sh --exclude ".*")
+test_queue.o: queue.h test_queue.c
+	$(CC) $(CFLAGS) -c test_queue.c
+
+test_queue: test_queue.o queue.o csapp.o
+	$(CC) $(CFLAGS) test_queue.o queue.o csapp.o -o test_queue $(LDFLAGS)
 
 clean:
-	rm -f *~ *.o proxy core *.tar *.zip *.gzip *.bzip *.gz
-
+	rm -f *~ *.o proxy core *.tar *.zip *.gzip *.bzip *.gz test_queue
