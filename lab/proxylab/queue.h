@@ -10,6 +10,9 @@
  * fixed), the producer will be suspended until any consumer take a item from
  * the queue.
  */
+#ifndef __QUEUE_H__
+#define __QUEUE_H__
+
 #include "csapp.h"
 
 struct queue {
@@ -33,3 +36,5 @@ int queue_get(struct queue *que);
 
 /* put the item in the end of the que */
 void queue_put(struct queue *que, int item);
+
+#endif /* __QUEUE_H__ */
