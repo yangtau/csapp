@@ -4,6 +4,7 @@
  */
 #ifndef __HTTP_H__
 #define __HTTP_H__
+#include <stddef.h>
 
 struct http_header {
   char *header_name;
@@ -26,13 +27,11 @@ struct http_request {
 
 struct http_response {};
 
-int http_request_parse(const char *request_raw, struct http_request *request);
+int http_request_parse(int connfd, struct http_request *request);
 
 int http_request_free(struct http_request *request);
 
 int http_request_get_header(const struct http_request *request,
-                            const char *hader_name, char *content);
-
-int http_request_get_host(const struct http_request *request, char *host);
-
+                            const char *header_name, char *content,
+                            size_t content_len);
 #endif /* __HTTP_H__ */
