@@ -12,20 +12,19 @@ struct http_header {
   struct http_header *next;
 };
 
-struct http_body {
-  char *content;
-};
-
 struct http_request {
   char *host;
+  char *port;
   char *uri;
   char *method;
   char *http_version;
   struct http_header *headers;
-  struct http_body *body;
+  char *body;
 };
 
 struct http_response {};
+
+const char *http_error_msg(int error_code);
 
 int http_request_parse(int connfd, struct http_request *request);
 

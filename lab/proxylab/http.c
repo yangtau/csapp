@@ -3,13 +3,15 @@
 #include <string.h>
 
 static const char *ERROR_MSG[] = {
-    "",                                                 /* padding */
+    "OK",                                               /* padding */
     "http_request_parse: Invalid request uri",          /* error code: 1 */
     "http_request_parse: Invalid request header",       /* error code: 2 */
     "http_request_parse: Invalid request line",         /* error code: 3 */
     "http_request_parse: Invalid request",              /* error code: 4 */
     "http_request_parse: No host specified in request", /* error code: 5 */
-    "http_request_get_header: No header found",         /* error code: 6 */
+    "http_request_get_header: Header not found",        /* error code: 6 */
+    "http_request_parse: Not supported method",         /* error code: 7 */
+    "http_request_parse: Bad port",         /* error code: 8 */
 };
 
 /* string_starts_with: return 0 if s1 starts with s2 */
@@ -78,6 +80,8 @@ static void __request_init(struct http_request *request) {
   request->http_version = NULL;
   request->method = NULL;
   request->host = NULL;
+  request->body = NULL;
+  request->port = NULL;
 }
 
 static int __request_parse_uri(char *request_uri, char **uri, char **host) {
@@ -113,16 +117,16 @@ static int __request_parse_method(char *request_method, char **method) {
   char *p;
 
   len = strlen(request_method);
-  *method = (char *)malloc(sizeof(char) * len);
-  p = *method;
 
   if (strcasecmp(request_method, "GET") == 0) {
+    *method = (char *)malloc(sizeof(char) * len);
+    p = *method;
+
     while ((*p++ = toupper(*request_method++))) /* capital copy */
       ;
   } else {
-    /* TODO: parse other methods */
+    rc = 7;
   }
-
   return rc;
 }
 
@@ -159,6 +163,7 @@ on_error:
 
 int http_request_parse(int connfd, struct http_request *request) {
   int rc = 0;
+  int len, total;
   char buf[MAXLINE], *cp, *space;
   rio_t rio;
 
@@ -170,6 +175,8 @@ int http_request_parse(int connfd, struct http_request *request) {
     rc = 4;
     goto on_error;
   }
+  // FIXME: delete
+  printf("###request-line:\n%s\n", buf);
 
   /* get the method name */
   if ((space = strchr(buf, ' ')) == NULL) {
@@ -195,12 +202,16 @@ int http_request_parse(int connfd, struct http_request *request) {
   request->http_version = string_strip_dup(cp);
 
   /* get HTTP headers */
+  rc = 4;
   while (Rio_readlineb(&rio, buf, MAXLINE) != 0) {
-    if (string_starts_with(buf, "\r\n") == 0)
+    if (string_starts_with(buf, "\r\n") == 0) {
+      rc = 0;
       break;
-    // printf("header line: \n%s", buf);
+    }
     __request_parse_headers(buf, &request->headers);
   }
+  if (rc != 0)
+    goto on_error; /* headers do not end with \r\n */
 
   if (request->host == NULL) {
     if ((rc = http_request_get_header(request, "Host", buf, MAXLINE)) != 0) {
@@ -210,7 +221,21 @@ int http_request_parse(int connfd, struct http_request *request) {
     request->host = strdup(buf);
   }
 
-  /* HTTP body TODO */
+  if ((cp = strchr(request->host, ':')) != NULL) {
+    /* the host specify the port */
+    *cp = '\0';
+    cp++;
+    request->port = strdup(cp);
+  }
+
+  /* HTTP body
+  total = 0;
+  while ((len = Rio_readnb(&rio, buf, MAXLINE) != 0)) {
+    total += len;
+    request->body = realloc(request->body, total);
+    memcpy(request->body + total - len, buf, len);
+  }
+  */
 
 on_error:
   return rc;
@@ -228,6 +253,9 @@ int http_request_free(struct http_request *request) {
 
   if (request->host)
     free(request->host);
+
+  if (request->body)
+    free(request->body);
 
   if (request->headers) {
     struct http_header *p, *q;
@@ -254,4 +282,10 @@ int http_request_get_header(const struct http_request *request,
   }
 
   return 6; /* no header found */
+}
+
+const char *http_error_msg(int error_code) {
+  if (error_code < 0 || error_code > sizeof(ERROR_MSG) / sizeof(char *))
+    return NULL;
+  return ERROR_MSG[error_code];
 }

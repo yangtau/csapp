@@ -678,10 +678,10 @@ ssize_t rio_readn(int fd, void *usrbuf, size_t n) {
  * rio_writen - Robustly write n bytes (unbuffered)
  */
 /* $begin rio_writen */
-ssize_t rio_writen(int fd, void *usrbuf, size_t n) {
+ssize_t rio_writen(int fd, const void *usrbuf, size_t n) {
   size_t nleft = n;
   ssize_t nwritten;
-  char *bufp = usrbuf;
+  const char *bufp = usrbuf;
 
   while (nleft > 0) {
     if ((nwritten = write(fd, bufp, nleft)) <= 0) {
@@ -802,7 +802,7 @@ ssize_t Rio_readn(int fd, void *ptr, size_t nbytes) {
   return n;
 }
 
-void Rio_writen(int fd, void *usrbuf, size_t n) {
+void Rio_writen(int fd,const void *usrbuf, size_t n) {
   if (rio_writen(fd, usrbuf, n) != n)
     unix_error("Rio_writen error");
 }
