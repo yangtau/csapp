@@ -5,13 +5,16 @@
 static const char *ERROR_MSG[] = {
     "OK",                                               /* padding */
     "http_request_parse: Invalid request uri",          /* error code: 1 */
-    "http_request_parse: Invalid request header",       /* error code: 2 */
+    "http_request_parse: Invalid request headers",      /* error code: 2 */
     "http_request_parse: Invalid request line",         /* error code: 3 */
     "http_request_parse: Invalid request",              /* error code: 4 */
     "http_request_parse: No host specified in request", /* error code: 5 */
     "http_request_get_header: Header not found",        /* error code: 6 */
     "http_request_parse: Not supported method",         /* error code: 7 */
-    "http_request_parse: Bad port",         /* error code: 8 */
+    "http_request_parse: Bad port",                     /* error code: 8 */
+    "http_response_parse: Invalid status line",         /* error code: 9 */
+    "http_response_parse: Invalid response headers",    /* error code: 10 */
+    "http_response_parse: Invalid Content-Length",      /* error code: 11 */
 };
 
 /* string_starts_with: return 0 if s1 starts with s2 */
@@ -130,8 +133,7 @@ static int __request_parse_method(char *request_method, char **method) {
   return rc;
 }
 
-static int __request_parse_headers(char *header_str,
-                                   struct http_header **header) {
+static int __http_headers_parse(char *header_str, struct http_header **header) {
   int rc = 0;
   char *cp;
   struct http_header *hp =
@@ -208,7 +210,7 @@ int http_request_parse(int connfd, struct http_request *request) {
       rc = 0;
       break;
     }
-    __request_parse_headers(buf, &request->headers);
+    __http_headers_parse(buf, &request->headers);
   }
   if (rc != 0)
     goto on_error; /* headers do not end with \r\n */
@@ -288,4 +290,117 @@ const char *http_error_msg(int error_code) {
   if (error_code < 0 || error_code > sizeof(ERROR_MSG) / sizeof(char *))
     return NULL;
   return ERROR_MSG[error_code];
+}
+
+void __response_init(struct http_response *response) {
+  response->status_code = 0;
+  response->reason_pharse = NULL;
+  response->body = NULL;
+  response->headers = NULL;
+  response->http_version = NULL;
+}
+
+int http_response_parse(int connfd, struct http_response *response) {
+  int rc = 0;
+  int body_len;
+  char buf[MAXLINE], *cp, *space;
+  rio_t rio;
+
+  __response_init(response);
+
+  Rio_readinitb(&rio, connfd);
+
+  if (Rio_readlineb(&rio, buf, MAXLINE) == 0) {
+    rc = 4;
+    goto on_error;
+  }
+
+  /* get the http version */
+  if ((space = strchr(buf, ' ')) == NULL) {
+    rc = 9;
+    goto on_error;
+  }
+  *space = '\0';
+
+  response->http_version = strdup(buf);
+
+  /* get the status code */
+  cp = space + 1;
+  if ((space = strchr(cp, ' ')) == NULL) {
+    rc = 9;
+    goto on_error;
+  }
+  *space = '\0';
+
+  if ((response->status_code = atoi(cp)) == 0) {
+    rc = 9;
+    goto on_error;
+  }
+
+  /* get the reason phrase */
+  cp = space + 1;
+  response->reason_pharse = string_strip_dup(cp);
+
+  /* get HTTP headers */
+  rc = 10;
+  while (Rio_readlineb(&rio, buf, MAXLINE) != 0) {
+    if (string_starts_with(buf, "\r\n") == 0) {
+      rc = 0;
+      break;
+    }
+    __http_headers_parse(buf, &response->headers);
+  }
+  if (rc != 0)
+    goto on_error; /* headers do not end with \r\n */
+
+  /* HTTP body */
+  body_len = 0;
+  if (http_response_get_header(response, "Content-Length", buf, MAXLINE) == 0) {
+    body_len = atoi(buf);
+  }
+  response->body = (char *)malloc(body_len);
+
+  if (Rio_readnb(&rio, response->body, body_len) != body_len) {
+    rc = 11;
+    goto on_error;
+  }
+
+on_error:
+  return rc;
+}
+
+int http_response_free(struct http_response *response) {
+  if (response->reason_pharse)
+    free(response->reason_pharse);
+
+  if (response->body)
+    free(response->body);
+
+  if (response->http_version)
+    free(response->http_version);
+
+  if (response->headers) {
+    for (struct http_header *q, *p = response->headers; p; p = q) {
+      q = p->next;
+      free(p);
+    }
+  }
+
+  return 0;
+}
+
+// TODO: merge http_response_get_header and http_request_parse into one function
+int http_response_get_header(const struct http_response *response,
+                             const char *header_name, char *content,
+                             size_t content_max_len) {
+  struct http_header *p;
+
+  for (p = response->headers; p; p = p->next) {
+    if (strcmp(header_name, p->header_name) == 0) {
+      strncpy(content, p->content, content_max_len);
+      return 0;
+    }
+  }
+
+  return 6; /* no header found */
 }
