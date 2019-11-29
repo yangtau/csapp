@@ -15,61 +15,15 @@ static const char *USER_AGENT_HDR =
 static const char *CONNECTION_HDR = "Connection: close\r\n";
 static const char *PROXY_CONNECTION_HDR = "Proxy-Connection: close\r\n";
 
-void *thread(void *arg);
+void *task(void *arg);
 
-void doit(int fd) {
-  struct http_request request;
-  int rc;
-  char buf[MAXLINE];
+struct http_request get_request(int fd);
 
-  if ((rc = http_request_parse(fd, &request)) != 0) {
-    printf("ERROR: %s\n", http_error_msg(rc));
-    exit(-1);
-  }
+struct http_response get_response(int connfd);
 
-  printf("hostname: %s\n", request.host);
-  printf("uri: %s\n", request.uri);
-  printf("version: %s\n", request.http_version);
-  printf("method: %s\n", request.method);
-  printf("headers:\n");
-  for (struct http_header *p = request.headers; p; p = p->next) {
-    printf("%s: %s\n", p->header_name, p->content);
-  }
+void forward_request(int connfd, struct http_request request);
 
-  printf("####REQUEST-BEGIN#####\n");
-  int connfd = Open_clientfd(request.host, request.port ? request.port : "80");
-  sprintf(buf, "%s %s %s\r\n", request.method, request.uri, "HTTP/1.0");
-  printf("%s %s %s\r\n", request.method, request.uri, "HTTP/1.0");
-  Rio_writen(connfd, buf, strlen(buf));
-  for (struct http_header *p = request.headers; p; p = p->next) {
-    if (/*strcmp(p->header_name, "User-Agent") == 0 || */
-        strcmp(p->header_name, "Connection") == 0 ||
-        strcmp(p->header_name, "Proxy-Connection") == 0)
-      continue;
-    sprintf(buf, "%s: %s\r\n", p->header_name, p->content);
-    printf("%s: %s\r\n", p->header_name, p->content);
-    Rio_writen(connfd, buf, strlen(buf));
-  }
-  Rio_writen(connfd, CONNECTION_HDR, strlen(CONNECTION_HDR));
-  printf(CONNECTION_HDR);
-  // Rio_writen(connfd, USER_AGENT_HDR, strlen(USER_AGENT_HDR));
-  printf(USER_AGENT_HDR);
-  Rio_writen(connfd, PROXY_CONNECTION_HDR, strlen(PROXY_CONNECTION_HDR));
-  printf(PROXY_CONNECTION_HDR);
-  Rio_writen(connfd, "\r\n", strlen("\r\n"));
-  printf("\r\n");
-  printf("####REQUEST-END#####\n");
-
-  rio_t rio;
-  Rio_readinitb(&rio, connfd);
-  printf("#####RESPONSE-BEGIN#####\n");
-  while (Rio_readlineb(&rio, buf, MAXLINE) != 0) {
-    printf("%s", buf);
-    Rio_writen(fd, buf, strlen(buf));
-  }
-  printf("#####RESPONSE-END#####\n");
-  http_request_free(&request);
-}
+void forward_response(int fd, struct http_response response);
 
 int main(int argc, char **argv) {
   struct queue que;
@@ -88,7 +42,7 @@ int main(int argc, char **argv) {
 
   for (int i = 0; i < THREAD_NUM; i++) {
     pthread_t id;
-    Pthread_create(&id, NULL, thread, &que);
+    Pthread_create(&id, NULL, task, &que);
   }
 
   while (1) {
@@ -107,17 +61,120 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-void *thread(void *arg) {
-  int connfd;
+void *task(void *arg) {
+  int client_fd, server_fd;
   struct queue *que = (struct queue *)arg;
+  struct http_request request;
+  struct http_response response;
 
   Pthread_detach(Pthread_self());
 
   while (1) {
-    connfd = queue_get(que);
-    // TODO: do it
-    doit(connfd);
-    Close(connfd);
+    client_fd = queue_get(que);
+    request = get_request(client_fd);
+
+    server_fd = Open_clientfd(request.host, request.port ? request.port : "80");
+    forward_request(server_fd, request);
+    response = get_response(server_fd);
+
+    forward_response(client_fd, response);
+
+    Close(server_fd);
+    Close(client_fd);
   }
   return NULL;
 }
+
+void forward_request(int fd, struct http_request request) {
+  char buf[MAXLINE];
+
+  /* request line: replace http_version with HTTP/1.0 */
+  sprintf(buf, "%s %s %s\r\n", request.method, request.uri, "HTTP/1.0");
+  Rio_writen(fd, buf, strlen(buf));
+
+  /* headers */
+  for (struct http_header *p = request.headers; p; p = p->next) {
+    if (/*strcmp(p->header_name, "User-Agent") == 0 || */
+        strcmp(p->header_name, "Connection") == 0 ||
+        strcmp(p->header_name, "Proxy-Connection") == 0)
+      continue;
+    sprintf(buf, "%s: %s\r\n", p->header_name, p->content);
+    Rio_writen(fd, buf, strlen(buf));
+  }
+
+  /* custom Connection and Proxy-Connection */
+  Rio_writen(fd, CONNECTION_HDR, strlen(CONNECTION_HDR));
+  Rio_writen(fd, PROXY_CONNECTION_HDR, strlen(PROXY_CONNECTION_HDR));
+  // Rio_writen(connfd, USER_AGENT_HDR, strlen(USER_AGENT_HDR));
+  Rio_writen(fd, "\r\n", strlen("\r\n"));
+}
+
+void forward_response(int fd, struct http_response response) {
+  char buf[MAXLINE];
+
+  /* status line */
+  sprintf(buf, "%s %d %s\r\n", response.http_version, response.status_code,
+          response.reason_pharse);
+  Rio_writen(fd, buf, strlen(buf));
+  /* headers */
+  for (struct http_header *p = response.headers; p; p = p->next) {
+    sprintf(buf, "%s: %s\r\n", p->header_name, p->content);
+    Rio_writen(fd, buf, strlen(buf));
+  }
+
+  Rio_writen(fd, "\r\n", strlen("\r\n")); /* CR LF */
+
+  /* body */
+  int body_len = 0;
+  if (http_response_get_header(&response, "Content-Length", buf, MAXLINE) ==
+      0) {
+    body_len = atoi(buf);
+    Rio_writen(fd, response.body, body_len);
+  }
+}
+
+struct http_response get_response(int fd) {
+  struct http_response response;
+  int rc;
+
+  if ((rc = http_response_parse(fd, &response)) != 0) {
+    printf("ERROR: %s\n", http_error_msg(rc));
+    exit(-1);
+  }
+
+  printf("#####RESPONSE-BEGIN#####\n");
+  printf("http_version:%s\n", response.http_version);
+  printf("status code:%d\n", response.status_code);
+  printf("status msg:%s\n", response.reason_pharse);
+  printf("headers:\n");
+  for (struct http_header *p = response.headers; p; p = p->next) {
+    printf("%s: %s\n", p->header_name, p->content);
+  }
+  printf("#####RESPONSE-END#####\n");
+  return response;
+}
+
+struct http_request get_request(int fd) {
+  struct http_request request;
+  int rc;
+
+  if ((rc = http_request_parse(fd, &request)) != 0) {
+    printf("ERROR: %s\n", http_error_msg(rc));
+    exit(-1);
+  }
+
+  printf("#####REQUEST-BEGIN#####\n");
+  printf("host: %s\n", request.host);
+  printf("port: %s\n", request.port);
+  printf("uri: %s\n", request.uri);
+  printf("version: %s\n", request.http_version);
+  printf("method: %s\n", request.method);
+  printf("headers:\n");
+  for (struct http_header *p = request.headers; p; p = p->next) {
+    printf("%s: %s\n", p->header_name, p->content);
+  }
+  printf("#####REQUEST-END#####\n");
+
+  return request;
+}
+

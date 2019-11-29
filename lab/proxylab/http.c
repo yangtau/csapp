@@ -165,7 +165,7 @@ on_error:
 
 int http_request_parse(int connfd, struct http_request *request) {
   int rc = 0;
-  int len, total;
+  // int len, total;
   char buf[MAXLINE], *cp, *space;
   rio_t rio;
 
@@ -277,7 +277,7 @@ int http_request_get_header(const struct http_request *request,
   struct http_header *p;
 
   for (p = request->headers; p; p = p->next) {
-    if (strcmp(header_name, p->header_name) == 0) {
+    if (strcasecmp(header_name, p->header_name) == 0) {
       strncpy(content, p->content, content_len);
       return 0;
     }
@@ -355,7 +355,7 @@ int http_response_parse(int connfd, struct http_response *response) {
 
   /* HTTP body */
   body_len = 0;
-  if (http_response_get_header(response, "Content-Length", buf, MAXLINE) == 0) {
+  if (http_response_get_header(response, "Content-length", buf, MAXLINE) == 0) {
     body_len = atoi(buf);
   }
   response->body = (char *)malloc(body_len);
@@ -396,11 +396,11 @@ int http_response_get_header(const struct http_response *response,
   struct http_header *p;
 
   for (p = response->headers; p; p = p->next) {
-    if (strcmp(header_name, p->header_name) == 0) {
+    if (strcasecmp(header_name, p->header_name) == 0) {
       strncpy(content, p->content, content_max_len);
       return 0;
     }
   }
 
-  return 6; /* no header found */
+  return 6; /* no such header name found */
 }
