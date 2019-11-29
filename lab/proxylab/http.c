@@ -121,7 +121,9 @@ static int __request_parse_method(char *request_method, char **method) {
 
   len = strlen(request_method);
 
-  if (strcasecmp(request_method, "GET") == 0) {
+  if (strcasecmp(request_method, "GET") == 0 ||
+      strcasecmp(request_method, "POST") == 0 ||
+      strcasecmp(request_method, "HEAD") == 0) {
     *method = (char *)malloc(sizeof(char) * len);
     p = *method;
 
@@ -165,7 +167,7 @@ on_error:
 
 int http_request_parse(int connfd, struct http_request *request) {
   int rc = 0;
-  // int len, total;
+  int body_len;
   char buf[MAXLINE], *cp, *space;
   rio_t rio;
 
@@ -177,8 +179,6 @@ int http_request_parse(int connfd, struct http_request *request) {
     rc = 4;
     goto on_error;
   }
-  // FIXME: delete
-  printf("###request-line:\n%s\n", buf);
 
   /* get the method name */
   if ((space = strchr(buf, ' ')) == NULL) {
@@ -230,14 +230,16 @@ int http_request_parse(int connfd, struct http_request *request) {
     request->port = strdup(cp);
   }
 
-  /* HTTP body
-  total = 0;
-  while ((len = Rio_readnb(&rio, buf, MAXLINE) != 0)) {
-    total += len;
-    request->body = realloc(request->body, total);
-    memcpy(request->body + total - len, buf, len);
+  /* HTTP body */
+  if (http_request_get_header(request, "Content-length", buf, MAXLINE) == 0) {
+    body_len = atoi(buf);
   }
-  */
+  request->body = (char *)malloc(body_len);
+
+  if (Rio_readnb(&rio, request->body, body_len) != body_len) {
+    rc = 11;
+    goto on_error;
+  }
 
 on_error:
   return rc;
@@ -355,7 +357,7 @@ int http_response_parse(int connfd, struct http_response *response) {
 
   /* HTTP body */
   body_len = 0;
-  if (http_response_get_header(response, "Content-length", buf, MAXLINE) == 0) {
+  if (http_response_get_header(response, "Content-Length", buf, MAXLINE) == 0) {
     body_len = atoi(buf);
   }
   response->body = (char *)malloc(body_len);

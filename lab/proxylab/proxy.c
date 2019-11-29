@@ -17,13 +17,15 @@ static const char *PROXY_CONNECTION_HDR = "Proxy-Connection: close\r\n";
 
 void *task(void *arg);
 
-struct http_request get_request(int fd);
-
-struct http_response get_response(int connfd);
-
 void forward_request(int connfd, struct http_request request);
 
+void bad_request(int connfd);
+
 void forward_response(int fd, struct http_response response);
+
+void show_response(struct http_response response);
+
+void show_request(struct http_request request);
 
 int main(int argc, char **argv) {
   struct queue que;
@@ -66,19 +68,39 @@ void *task(void *arg) {
   struct queue *que = (struct queue *)arg;
   struct http_request request;
   struct http_response response;
+  int rc;
 
   Pthread_detach(Pthread_self());
 
   while (1) {
     client_fd = queue_get(que);
-    request = get_request(client_fd);
+
+    if ((rc = http_request_parse(client_fd, &request)) != 0) {
+      printf("Log http_request_parse_error: %s\n", http_error_msg(rc));
+      bad_request(client_fd);
+
+      http_request_free(&request);
+      Close(client_fd);
+      continue;
+    }
+    show_request(request);
 
     server_fd = Open_clientfd(request.host, request.port ? request.port : "80");
     forward_request(server_fd, request);
-    response = get_response(server_fd);
+
+    if ((rc = http_response_parse(server_fd, &response)) != 0) {
+      printf("Log http_response_parse_error: %s\n", http_error_msg(rc));
+
+      http_response_free(&response);
+      Close(server_fd);
+      continue;
+    }
+    show_response(response);
 
     forward_response(client_fd, response);
 
+    http_request_free(&request);
+    http_response_free(&response);
     Close(server_fd);
     Close(client_fd);
   }
@@ -113,7 +135,7 @@ void forward_response(int fd, struct http_response response) {
   char buf[MAXLINE];
 
   /* status line */
-  sprintf(buf, "%s %d %s\r\n", response.http_version, response.status_code,
+  sprintf(buf, "%s %d %s\r\n", "HTTP/1.0", response.status_code,
           response.reason_pharse);
   Rio_writen(fd, buf, strlen(buf));
   /* headers */
@@ -133,15 +155,17 @@ void forward_response(int fd, struct http_response response) {
   }
 }
 
-struct http_response get_response(int fd) {
-  struct http_response response;
-  int rc;
+void bad_request(int fd) {
+  char buf[MAXLINE];
 
-  if ((rc = http_response_parse(fd, &response)) != 0) {
-    printf("ERROR: %s\n", http_error_msg(rc));
-    exit(-1);
-  }
+  /* status line */
+  sprintf(buf, "%s %d %s\r\n", "HTTP/1.0", 400, "Bad Request");
+  Rio_writen(fd, buf, strlen(buf));
 
+  Rio_writen(fd, "\r\n", strlen("\r\n")); /* CR LF */
+}
+
+void show_response(struct http_response response) {
   printf("#####RESPONSE-BEGIN#####\n");
   printf("http_version:%s\n", response.http_version);
   printf("status code:%d\n", response.status_code);
@@ -151,18 +175,9 @@ struct http_response get_response(int fd) {
     printf("%s: %s\n", p->header_name, p->content);
   }
   printf("#####RESPONSE-END#####\n");
-  return response;
 }
 
-struct http_request get_request(int fd) {
-  struct http_request request;
-  int rc;
-
-  if ((rc = http_request_parse(fd, &request)) != 0) {
-    printf("ERROR: %s\n", http_error_msg(rc));
-    exit(-1);
-  }
-
+void show_request(struct http_request request) {
   printf("#####REQUEST-BEGIN#####\n");
   printf("host: %s\n", request.host);
   printf("port: %s\n", request.port);
@@ -174,7 +189,4 @@ struct http_request get_request(int fd) {
     printf("%s: %s\n", p->header_name, p->content);
   }
   printf("#####REQUEST-END#####\n");
-
-  return request;
 }
-
