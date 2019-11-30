@@ -22,8 +22,11 @@ proxy.o: proxy.c csapp.h
 http.o: http.c http.h csapp.h
 	$(CC) $(CFLAGS) -c http.c
 
-proxy: proxy.o csapp.o queue.o http.o
-	$(CC) $(CFLAGS) proxy.o csapp.o queue.o http.o -o proxy $(LDFLAGS)
+cache.o: cache.c cache.h csapp.h
+	$(CC) $(CFLAGS) -c cache.c
+
+proxy: proxy.o csapp.o queue.o http.o cache.o
+	$(CC) $(CFLAGS) proxy.o csapp.o queue.o http.o cache.o -o proxy $(LDFLAGS)
 
 test_queue.o: queue.h test_queue.c
 	$(CC) $(CFLAGS) -c test_queue.c

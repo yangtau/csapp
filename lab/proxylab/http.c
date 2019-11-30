@@ -296,6 +296,7 @@ const char *http_error_msg(int error_code) {
 
 void __response_init(struct http_response *response) {
   response->status_code = 0;
+  response->body_len = 0;
   response->reason_pharse = NULL;
   response->body = NULL;
   response->headers = NULL;
@@ -366,6 +367,7 @@ int http_response_parse(int connfd, struct http_response *response) {
     rc = 11;
     goto on_error;
   }
+  response->body_len = body_len;
 
 on_error:
   return rc;

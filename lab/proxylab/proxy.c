@@ -1,11 +1,10 @@
+#include "cache.h"
 #include "csapp.h"
 #include "http.h"
 #include "queue.h"
 #include <stdio.h>
 
 /* Recommended max cache and object sizes */
-#define MAX_CACHE_SIZE 1049000
-#define MAX_OBJECT_SIZE 102400
 #define THREAD_NUM 20
 #define BUF_SIZE 100
 
@@ -14,6 +13,14 @@ static const char *USER_AGENT_HDR =
     "Firefox/70.0\r\n";
 static const char *CONNECTION_HDR = "Connection: close\r\n";
 static const char *PROXY_CONNECTION_HDR = "Proxy-Connection: close\r\n";
+
+static struct cache cache;
+
+int put_into_cache(struct http_request *request,
+                   struct http_response *response);
+
+/* find_in_cache: return 0 if hit */
+int find_in_cache(struct http_request *request, struct http_response *response);
 
 void *task(void *arg);
 
@@ -38,9 +45,11 @@ int main(int argc, char **argv) {
     printf("Usage: %s port\n", argv[0]);
     return 0;
   }
-  listenfd = Open_listenfd(argv[1]);
 
   queue_init(&que, BUF_SIZE);
+  cache_init(&cache);
+
+  listenfd = Open_listenfd(argv[1]);
 
   for (int i = 0; i < THREAD_NUM; i++) {
     pthread_t id;
@@ -60,6 +69,7 @@ int main(int argc, char **argv) {
   // Never be executed
   Close(listenfd);
   queue_free(&que);
+  cache_free(&cache);
   return 0;
 }
 
@@ -85,17 +95,25 @@ void *task(void *arg) {
     }
     show_request(request);
 
-    server_fd = Open_clientfd(request.host, request.port ? request.port : "80");
-    forward_request(server_fd, request);
+    if (find_in_cache(&request, &response) == 0) {
+      printf("LOG: found in cache\n");
+    } else {
+      /* not found in cache */
+      server_fd =
+          Open_clientfd(request.host, request.port ? request.port : "80");
+      forward_request(server_fd, request);
 
-    if ((rc = http_response_parse(server_fd, &response)) != 0) {
-      printf("Log http_response_parse_error: %s\n", http_error_msg(rc));
+      if ((rc = http_response_parse(server_fd, &response)) != 0) {
+        printf("Log http_response_parse_error: %s\n", http_error_msg(rc));
 
-      http_response_free(&response);
-      Close(server_fd);
-      continue;
+        http_response_free(&response);
+        Close(server_fd);
+        continue;
+      }
     }
     show_response(response);
+
+    put_into_cache(&request, &response);
 
     forward_response(client_fd, response);
 
@@ -147,11 +165,8 @@ void forward_response(int fd, struct http_response response) {
   Rio_writen(fd, "\r\n", strlen("\r\n")); /* CR LF */
 
   /* body */
-  int body_len = 0;
-  if (http_response_get_header(&response, "Content-Length", buf, MAXLINE) ==
-      0) {
-    body_len = atoi(buf);
-    Rio_writen(fd, response.body, body_len);
+  if (response.body_len != 0) {
+    Rio_writen(fd, response.body, response.body_len);
   }
 }
 
@@ -189,4 +204,53 @@ void show_request(struct http_request request) {
     printf("%s: %s\n", p->header_name, p->content);
   }
   printf("#####REQUEST-END#####\n");
+}
+
+int put_into_cache(struct http_request *request,
+                   struct http_response *response) {
+  int rc = 0;
+  char id_buf[MAXLINE];
+
+  sprintf(id_buf, "%s %s:%s%s", request->method, request->host,
+          request->port ? request->port : "", request->uri);
+
+  if ((rc = cache_put(&cache, id_buf, response->body, response->body_len)) !=
+      0) {
+    printf("Cache Log: %s\n", cache_error_msg(rc));
+  }
+
+  return rc;
+}
+
+int find_in_cache(struct http_request *request,
+                  struct http_response *response) {
+  int rc, len;
+  char str_buf[MAXLINE];
+  char buf[MAX_OBJECT_SIZE];
+
+  sprintf(str_buf, "%s %s:%s%s", request->method, request->host,
+          request->port ? request->port : "", request->uri);
+
+  if ((rc = cache_get(&cache, str_buf, buf, MAX_OBJECT_SIZE, &len)) != 0) {
+    return rc;
+  }
+
+  // TODO: format response in http.c
+  response->status_code = 200;
+  response->reason_pharse = strdup("OK");
+  response->body_len = len;
+  response->http_version = NULL;
+
+  response->body = malloc(len);
+  memcpy(response->body, buf, len);
+
+  struct http_header *hp = malloc(sizeof(struct http_header));
+  hp->next = NULL;
+  hp->header_name = strdup("Content-Length");
+  sprintf(str_buf, "%d", len);
+  hp->content = strdup(str_buf);
+
+  response->headers = hp;
+
+  return rc;
 }

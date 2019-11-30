@@ -27,6 +27,7 @@ struct http_response {
   char *reason_pharse;
   char *http_version;
   struct http_header *headers;
+  int body_len;
   char *body;
 };
 
