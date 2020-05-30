@@ -2,7 +2,7 @@
 
 ## Arrays
 
-`int (*arr)[ROW]` equals to`int arr[][ROW]` as function arguments, which is different from `int* arr[ROW]`(In face, `Row` in this term is not necessary).
+`int (*arr)[ROW]` equals to`int arr[][ROW]` as function arguments, which is different from `int* arr[ROW]`(In fact, `Row` in this term is not necessary).
 
 *func1.c*
 
